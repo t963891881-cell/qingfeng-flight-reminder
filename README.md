@@ -14,8 +14,8 @@
 
 ## 安装
 
-1. 从 [Releases](../../releases/latest) 下载 `Qingfeng-Flight-Reminder-macOS.zip`。
-2. 解压后把“清风航线.app”拖入“应用程序”文件夹。
+1. 从 [Releases](../../releases/latest) 下载 `Qingfeng-Flight-Reminder-1.10.dmg`。
+2. 打开 DMG，把“清风航线”拖到其中的“Applications”文件夹。
 3. 首次打开时允许访问“提醒事项”。
 
 当前发布包采用临时签名、尚未经过 Apple 公证。如果 macOS 提示无法验证开发者，请在 Finder 中按住 Control 点击应用，选择“打开”，再确认一次。
@@ -38,6 +38,13 @@ open "dist/清风航线.app"
 
 ```bash
 UNIVERSAL=1 ./scripts/build-app.sh
+```
+
+制作拖拽安装 DMG：
+
+```bash
+chmod +x scripts/build-dmg.sh
+./scripts/build-dmg.sh
 ```
 
 ## 隐私
