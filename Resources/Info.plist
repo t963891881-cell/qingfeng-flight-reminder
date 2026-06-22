@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>zh_CN</string>
+    <key>CFBundleExecutable</key>
+    <string>FlightReminder</string>
+    <key>CFBundleIdentifier</key>
+    <string>local.qingfeng.FlightReminder</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>清风航线</string>
+    <key>CFBundleDisplayName</key>
+    <string>清风航线</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+	<string>1.10</string>
+    <key>CFBundleVersion</key>
+	<string>11</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSRemindersUsageDescription</key>
+    <string>清风航线需要读取今天未完成的提醒事项，以便用飞行横幅提醒你。</string>
+    <key>NSRemindersFullAccessUsageDescription</key>
+    <string>清风航线需要读取今天未完成的提醒事项，以便用飞行横幅提醒你。</string>
+</dict>
+</plist>
