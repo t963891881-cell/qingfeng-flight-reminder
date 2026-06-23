@@ -9,16 +9,27 @@ final class FlightReminderAppDelegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--qa-preview") {
             showQAPreview()
         } else {
+            ShortcutSettings.shared.activate()
             ReminderMonitor.shared.start()
         }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        ShortcutSettings.shared.cancelRecording()
+        GlobalHotKeyManager.shared.stop()
     }
 
     private func showQAPreview() {
         let monitor = ReminderMonitor.shared
         monitor.prepareQAPreview()
+        if CommandLine.arguments.contains("--qa-register-shortcut") {
+            ShortcutSettings.shared.activate()
+        } else {
+            ShortcutSettings.shared.prepareQAPreview()
+        }
 
         guard let screen = NSScreen.screens.first(where: { $0.frame.origin == .zero }) ?? NSScreen.main else { return }
-        let size = NSSize(width: 400, height: 680)
+        let size = NSSize(width: 400, height: 780)
         let origin = NSPoint(
             x: screen.visibleFrame.maxX - size.width - 24,
             y: screen.visibleFrame.maxY - size.height - 18
@@ -53,6 +64,12 @@ final class FlightReminderAppDelegate: NSObject, NSApplicationDelegate {
                 if let first = monitor.overdueReminders.first {
                     monitor.moveToToday(first)
                 }
+            }
+        }
+
+        if CommandLine.arguments.contains("--qa-record-shortcut") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                ShortcutSettings.shared.startRecording()
             }
         }
 

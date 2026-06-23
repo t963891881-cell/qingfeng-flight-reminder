@@ -4,6 +4,7 @@ import SwiftUI
 
 struct MenuPopoverView: View {
     @ObservedObject var monitor: ReminderMonitor
+    @ObservedObject private var shortcutSettings = ShortcutSettings.shared
 
     @AppStorage("monitorEnabled") private var monitorEnabled = true
     @AppStorage("checkIntervalMinutes") private var checkIntervalMinutes = 30
@@ -22,22 +23,33 @@ struct MenuPopoverView: View {
             if !monitor.isAuthorized {
                 permissionCard
                     .padding(.horizontal, 14)
-                    .padding(.bottom, 12)
+                    .padding(.bottom, 10)
             }
 
-            remindersSection
+            summaryHeader
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+
+            reminderList
                 .padding(.horizontal, 14)
+                .padding(.top, 8)
 
             settingsSection
-                .padding(.horizontal, 14)
-                .padding(.top, 12)
+                .padding(.horizontal, 16)
+                .padding(.top, 9)
 
             footer
         }
         .frame(width: 400)
         .background(.ultraThinMaterial)
         .tint(Color.accentColor)
-        .onAppear { monitor.start() }
+        .onAppear {
+            monitor.start()
+            shortcutSettings.activate()
+        }
+        .onDisappear {
+            shortcutSettings.cancelRecording()
+        }
     }
 
     private var header: some View {
@@ -49,17 +61,16 @@ struct MenuPopoverView: View {
                         .scaledToFit()
                 } else {
                     Image(systemName: "airplane")
-                        .font(.system(size: 21, weight: .semibold))
+                        .font(.system(size: 22, weight: .semibold))
                         .foregroundStyle(Color.accentColor)
                 }
             }
-            .frame(width: 38, height: 38)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .frame(width: 42, height: 42)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text("清风航线")
-                    .font(.system(size: 16, weight: .semibold))
-                HStack(spacing: 5) {
+                    .font(.system(size: 17, weight: .semibold))
+                HStack(spacing: 6) {
                     Circle()
                         .fill(monitorEnabled ? Color.green : Color.secondary)
                         .frame(width: 6, height: 6)
@@ -77,7 +88,42 @@ struct MenuPopoverView: View {
                 .controlSize(.regular)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.top, 15)
+        .padding(.bottom, 12)
+    }
+
+    private var summaryHeader: some View {
+        HStack(spacing: 10) {
+            Text(monitor.reminders.isEmpty ? "今天没有待处理提醒" : "今天还有 \(monitor.reminders.count) 项提醒")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            if !monitor.overdueReminders.isEmpty {
+                Text("已过期 \(monitor.overdueReminders.count)")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Color.orange.opacity(0.11), in: Capsule())
+            }
+
+            Spacer()
+
+            if monitor.isChecking {
+                ProgressView().controlSize(.small)
+            } else {
+                Button {
+                    monitor.refresh(shouldFly: false)
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 26, height: 26)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("立即刷新")
+            }
+        }
     }
 
     private var permissionCard: some View {
@@ -96,143 +142,104 @@ struct MenuPopoverView: View {
             }
             .buttonStyle(.borderedProminent)
         }
-        .padding(13)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
     }
 
-    private var remindersSection: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack {
-                Text(monitor.reminders.isEmpty ? "今天没有待处理提醒" : "今天还有 \(monitor.reminders.count) 项提醒")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
-
-                if !monitor.overdueReminders.isEmpty {
-                    Text("已过期 \(monitor.overdueReminders.count)")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.orange)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(Color.orange.opacity(0.11), in: Capsule())
+    private var reminderList: some View {
+        VStack(spacing: 0) {
+            if monitor.isAuthorized && monitor.reminders.isEmpty && monitor.overdueReminders.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 25))
+                        .foregroundStyle(Color.green)
+                    Text("今天的航线很清爽")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text("清风航线会继续安静巡航")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
                 }
-
-                Spacer()
-
-                if monitor.isChecking {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Button {
-                        monitor.refresh(shouldFly: false)
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 13, weight: .semibold))
-                            .frame(width: 26, height: 26)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 24)
+            } else {
+                ForEach(Array(monitor.reminders.prefix(4).enumerated()), id: \.element.id) { index, item in
+                    if index > 0 {
+                        Divider().padding(.leading, 52)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .help("立即刷新")
+                    ReminderRow(
+                        item: item,
+                        isOverdue: false,
+                        isCompleting: monitor.completingReminderIDs.contains(item.id),
+                        isRescheduling: false,
+                        onMoveToToday: nil,
+                        onComplete: { monitor.complete(item) }
+                    )
                 }
             }
-            .padding(.horizontal, 2)
 
-            VStack(spacing: 0) {
-                if monitor.isAuthorized && monitor.reminders.isEmpty && monitor.overdueReminders.isEmpty {
-                    VStack(spacing: 8) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 25))
-                            .foregroundStyle(Color.green)
-                        Text("今天的航线很清爽")
-                            .font(.system(size: 13, weight: .semibold))
-                        Text("清风航线会继续安静巡航")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 24)
-                } else {
-                    ForEach(Array(monitor.reminders.prefix(4).enumerated()), id: \.element.id) { index, item in
-                        if index > 0 {
-                            Divider().padding(.leading, 40)
-                        }
-                        ReminderRow(
-                            item: item,
-                            isOverdue: false,
-                            isCompleting: monitor.completingReminderIDs.contains(item.id),
-                            isRescheduling: false,
-                            onMoveToToday: nil,
-                            onComplete: { monitor.complete(item) }
-                        )
-                    }
-                }
+            if !monitor.overdueReminders.isEmpty {
+                Divider().padding(.leading, 52)
 
-                if !monitor.overdueReminders.isEmpty {
-                    if !monitor.reminders.isEmpty {
-                        Divider().padding(.leading, 40)
-                    }
-
-                    HStack(spacing: 7) {
-                        Image(systemName: "clock.badge.exclamationmark")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text("已过期 \(monitor.overdueReminders.count) 项")
-                    }
-                    .foregroundStyle(.orange)
+                Label("已过期 \(monitor.overdueReminders.count) 项", systemImage: "clock.badge.exclamationmark")
                     .font(.system(size: 10, weight: .semibold))
-                    .padding(.horizontal, 13)
-                    .padding(.top, 10)
-                    .padding(.bottom, 4)
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 8)
 
-                    ForEach(Array(monitor.overdueReminders.prefix(4).enumerated()), id: \.element.id) { index, item in
-                        if index > 0 {
-                            Divider().padding(.leading, 40)
-                        }
-                        ReminderRow(
-                            item: item,
-                            isOverdue: true,
-                            isCompleting: monitor.completingReminderIDs.contains(item.id),
-                            isRescheduling: monitor.reschedulingReminderIDs.contains(item.id),
-                            onMoveToToday: { monitor.moveToToday(item) },
-                            onComplete: { monitor.complete(item) }
-                        )
+                ForEach(Array(monitor.overdueReminders.prefix(4).enumerated()), id: \.element.id) { index, item in
+                    if index > 0 {
+                        Divider().padding(.leading, 52)
                     }
-                }
-
-                if monitor.isAuthorized {
-                    Divider().padding(.leading, 40)
-                    Button {
-                        monitor.openReminders()
-                    } label: {
-                        HStack {
-                            Text("打开提醒事项")
-                            Spacer()
-                            Image(systemName: "arrow.up.forward.app")
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 11)
+                    ReminderRow(
+                        item: item,
+                        isOverdue: true,
+                        isCompleting: monitor.completingReminderIDs.contains(item.id),
+                        isRescheduling: monitor.reschedulingReminderIDs.contains(item.id),
+                        onMoveToToday: { monitor.moveToToday(item) },
+                        onComplete: { monitor.complete(item) }
+                    )
                 }
             }
-            .background {
-                RoundedRectangle(cornerRadius: 17, style: .continuous)
-                    .fill(.thinMaterial)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 17, style: .continuous)
-                            .fill(Color.accentColor.opacity(0.055))
+
+            if monitor.isAuthorized {
+                Divider().padding(.leading, 14)
+                Button {
+                    monitor.openReminders()
+                } label: {
+                    HStack {
+                        Text("打开提醒事项")
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
                     }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
             }
-            .overlay {
-                RoundedRectangle(cornerRadius: 17, style: .continuous)
-                    .stroke(Color.white.opacity(0.55), lineWidth: 0.8)
-            }
+        }
+        .background {
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .fill(.thinMaterial)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.038))
+                }
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.38), lineWidth: 0.5)
         }
     }
 
     private var settingsSection: some View {
         VStack(spacing: 0) {
+            Divider()
+
             settingRow(icon: "clock", title: "检测间隔") {
                 Picker("检测间隔", selection: $checkIntervalMinutes) {
                     Text("5 分钟").tag(5)
@@ -246,7 +253,7 @@ struct MenuPopoverView: View {
                 .onChange(of: checkIntervalMinutes) { _, _ in monitor.restartSchedule() }
             }
 
-            Divider().padding(.leading, 43)
+            Divider().padding(.leading, 34)
 
             settingRow(icon: "moon", title: "勿扰时段") {
                 HStack(spacing: 4) {
@@ -256,10 +263,26 @@ struct MenuPopoverView: View {
                 }
             }
 
-            Divider().padding(.leading, 43)
+            Divider().padding(.leading, 34)
+
+            settingRow(icon: "keyboard", title: "测试飞行快捷键") {
+                Button {
+                    shortcutSettings.startRecording()
+                } label: {
+                    Text(shortcutSettings.displayText)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .frame(minWidth: 54)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(shortcutSettings.isRecording ? Color.orange : Color.accentColor)
+                .help("点击后按下组合键；录制时按 Delete 可清除")
+            }
+
+            Divider().padding(.leading, 34)
 
             Button(action: showAbout) {
-                HStack(spacing: 11) {
+                HStack(spacing: 10) {
                     Image(systemName: "info.circle")
                         .font(.system(size: 15))
                         .foregroundStyle(.secondary)
@@ -272,21 +295,18 @@ struct MenuPopoverView: View {
                         .foregroundStyle(.tertiary)
                 }
                 .contentShape(Rectangle())
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 2)
                 .padding(.vertical, 11)
             }
             .buttonStyle(.plain)
-        }
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .stroke(Color.white.opacity(0.45), lineWidth: 0.7)
+
+            Divider()
         }
     }
 
     private var footer: some View {
-        VStack(spacing: 10) {
-            if let error = monitor.lastError {
+        VStack(spacing: 9) {
+            if let error = monitor.lastError ?? shortcutSettings.errorMessage {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.red)
@@ -317,11 +337,13 @@ struct MenuPopoverView: View {
             .font(.system(size: 10, weight: .medium))
             .foregroundStyle(.tertiary)
         }
-        .padding(14)
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+        .padding(.bottom, 12)
     }
 
     private func settingRow<Content: View>(icon: String, title: String, @ViewBuilder content: () -> Content) -> some View {
-        HStack(spacing: 11) {
+        HStack(spacing: 10) {
             Image(systemName: icon)
                 .font(.system(size: 15))
                 .foregroundStyle(.secondary)
@@ -331,7 +353,7 @@ struct MenuPopoverView: View {
             Spacer()
             content()
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 2)
         .padding(.vertical, 10)
     }
 
@@ -386,7 +408,7 @@ private struct ReminderRow: View {
     }()
 
     var body: some View {
-        HStack(alignment: .center, spacing: 11) {
+        HStack(alignment: .center, spacing: 10) {
             Circle()
                 .fill(isOverdue ? Color.orange : Color.accentColor)
                 .frame(width: 7, height: 7)
@@ -409,22 +431,23 @@ private struct ReminderRow: View {
                 .foregroundStyle(.secondary)
             }
 
-            Spacer()
+            Spacer(minLength: 6)
 
             if let onMoveToToday {
                 Button(action: onMoveToToday) {
                     if isRescheduling {
                         ProgressView()
                             .controlSize(.mini)
-                            .frame(width: 34)
+                            .frame(width: 32)
                     } else {
                         Text("今天办")
                             .font(.system(size: 10, weight: .semibold))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color.secondary.opacity(0.10), in: Capsule())
                     }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.mini)
-                .tint(Color.accentColor)
+                .buttonStyle(.plain)
                 .disabled(isRescheduling || isCompleting)
                 .help("把截止日期改为今天")
             }
@@ -432,8 +455,7 @@ private struct ReminderRow: View {
             Button(action: onComplete) {
                 Group {
                     if isCompleting {
-                        ProgressView()
-                            .controlSize(.small)
+                        ProgressView().controlSize(.small)
                     } else {
                         Image(systemName: "circle")
                             .font(.system(size: 16, weight: .regular))
@@ -448,7 +470,7 @@ private struct ReminderRow: View {
             .help("标记为已完成")
             .accessibilityLabel("完成提醒：\(item.title)")
         }
-        .padding(.horizontal, 13)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
     }
 }

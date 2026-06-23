@@ -187,6 +187,10 @@ final class ReminderMonitor: ObservableObject {
     }
 
     func testFlight() {
+        if isQAPreview {
+            FlightOverlayController.shared.show(reminders: reminders, isTest: true)
+            return
+        }
         refresh(shouldFly: false, showTestAfterRefresh: true)
     }
 
