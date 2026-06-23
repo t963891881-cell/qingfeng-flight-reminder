@@ -159,6 +159,8 @@ struct MenuPopoverView: View {
                             item: item,
                             isOverdue: false,
                             isCompleting: monitor.completingReminderIDs.contains(item.id),
+                            isRescheduling: false,
+                            onMoveToToday: nil,
                             onComplete: { monitor.complete(item) }
                         )
                     }
@@ -188,6 +190,8 @@ struct MenuPopoverView: View {
                             item: item,
                             isOverdue: true,
                             isCompleting: monitor.completingReminderIDs.contains(item.id),
+                            isRescheduling: monitor.reschedulingReminderIDs.contains(item.id),
+                            onMoveToToday: { monitor.moveToToday(item) },
                             onComplete: { monitor.complete(item) }
                         )
                     }
@@ -363,6 +367,8 @@ private struct ReminderRow: View {
     let item: ReminderItem
     let isOverdue: Bool
     let isCompleting: Bool
+    let isRescheduling: Bool
+    let onMoveToToday: (() -> Void)?
     let onComplete: () -> Void
 
     private static let timeFormatter: DateFormatter = {
@@ -405,6 +411,24 @@ private struct ReminderRow: View {
 
             Spacer()
 
+            if let onMoveToToday {
+                Button(action: onMoveToToday) {
+                    if isRescheduling {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .frame(width: 34)
+                    } else {
+                        Text("今天办")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                .tint(Color.accentColor)
+                .disabled(isRescheduling || isCompleting)
+                .help("把截止日期改为今天")
+            }
+
             Button(action: onComplete) {
                 Group {
                     if isCompleting {
@@ -420,7 +444,7 @@ private struct ReminderRow: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.tertiary)
-            .disabled(isCompleting)
+            .disabled(isCompleting || isRescheduling)
             .help("标记为已完成")
             .accessibilityLabel("完成提醒：\(item.title)")
         }

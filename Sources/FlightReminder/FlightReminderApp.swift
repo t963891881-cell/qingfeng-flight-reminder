@@ -48,8 +48,18 @@ final class FlightReminderAppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            FlightOverlayController.shared.show(reminders: monitor.reminders)
+        if CommandLine.arguments.contains("--qa-move-overdue-first") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                if let first = monitor.overdueReminders.first {
+                    monitor.moveToToday(first)
+                }
+            }
+        }
+
+        if !CommandLine.arguments.contains("--qa-no-flight") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                FlightOverlayController.shared.show(reminders: monitor.reminders)
+            }
         }
     }
 }

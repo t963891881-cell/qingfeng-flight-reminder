@@ -12,6 +12,7 @@ final class ReminderMonitor: ObservableObject {
     @Published private(set) var isChecking = false
     @Published private(set) var lastChecked: Date?
     @Published private(set) var completingReminderIDs: Set<String> = []
+    @Published private(set) var reschedulingReminderIDs: Set<String> = []
     @Published var lastError: String?
 
     private let store = EKEventStore()
@@ -228,6 +229,51 @@ final class ReminderMonitor: ObservableObject {
         }
     }
 
+    func moveToToday(_ item: ReminderItem) {
+        guard !reschedulingReminderIDs.contains(item.id) else { return }
+
+        if isQAPreview {
+            movePreviewItemToToday(item)
+            return
+        }
+
+        guard isAuthorized else {
+            lastError = "没有提醒事项完整访问权限。"
+            return
+        }
+        guard let reminder = store.calendarItem(withIdentifier: item.id) as? EKReminder else {
+            lastError = "找不到这条提醒事项，请刷新后重试。"
+            refresh(shouldFly: false)
+            return
+        }
+
+        let calendar = Calendar.current
+        let today = calendar.dateComponents([.year, .month, .day], from: Date())
+        var due = reminder.dueDateComponents ?? DateComponents()
+        due.year = today.year
+        due.month = today.month
+        due.day = today.day
+        due.calendar = calendar
+        due.timeZone = calendar.timeZone
+
+        reschedulingReminderIDs.insert(item.id)
+        reminder.dueDateComponents = due
+
+        do {
+            try store.save(reminder, commit: true)
+            overdueReminders.removeAll { $0.id == item.id }
+            lastError = nil
+            reschedulingReminderIDs.remove(item.id)
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                self?.refresh(shouldFly: false)
+            }
+        } catch {
+            reschedulingReminderIDs.remove(item.id)
+            lastError = "无法改到今天：\(error.localizedDescription)"
+        }
+    }
+
     func prepareQAPreview() {
         isQAPreview = true
         authorizationStatus = .fullAccess
@@ -241,6 +287,28 @@ final class ReminderMonitor: ObservableObject {
             ReminderItem(id: "qa-overdue-2", title: "回复供应商邮件", dueDate: Date().addingTimeInterval(-172_800), listTitle: "提醒")
         ]
         lastChecked = Date()
+    }
+
+    private func movePreviewItemToToday(_ item: ReminderItem) {
+        let calendar = Calendar.current
+        let oldDate = item.dueDate ?? Date()
+        let oldTime = calendar.dateComponents([.hour, .minute, .second], from: oldDate)
+        var today = calendar.dateComponents([.year, .month, .day], from: Date())
+        today.hour = oldTime.hour
+        today.minute = oldTime.minute
+        today.second = oldTime.second
+        today.calendar = calendar
+        today.timeZone = calendar.timeZone
+
+        let movedItem = ReminderItem(
+            id: item.id,
+            title: item.title,
+            dueDate: calendar.date(from: today),
+            listTitle: item.listTitle
+        )
+        overdueReminders.removeAll { $0.id == item.id }
+        reminders.append(movedItem)
+        reminders.sort { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
     }
 
     private var canFlyNow: Bool {
