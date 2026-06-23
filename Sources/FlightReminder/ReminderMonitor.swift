@@ -7,6 +7,7 @@ final class ReminderMonitor: ObservableObject {
     static let shared = ReminderMonitor()
 
     @Published private(set) var reminders: [ReminderItem] = []
+    @Published private(set) var overdueReminders: [ReminderItem] = []
     @Published private(set) var authorizationStatus = EKEventStore.authorizationStatus(for: .reminder)
     @Published private(set) var isChecking = false
     @Published private(set) var lastChecked: Date?
@@ -113,6 +114,7 @@ final class ReminderMonitor: ObservableObject {
         authorizationStatus = EKEventStore.authorizationStatus(for: .reminder)
         guard isAuthorized else {
             reminders = []
+            overdueReminders = []
             return
         }
 
@@ -121,22 +123,21 @@ final class ReminderMonitor: ObservableObject {
         let now = Date()
         let start = calendar.startOfDay(for: now)
         let end = calendar.date(byAdding: .day, value: 1, to: start) ?? Date().addingTimeInterval(86_400)
-        // EventKit calendars can carry a different or missing time zone. Query a
-        // slightly wider window, then enforce the exact local calendar day below.
-        let queryStart = calendar.date(byAdding: .day, value: -1, to: start) ?? start
+        // Fetch every incomplete reminder due before the end of the local day,
+        // then split it into today's and overdue groups below.
         let queryEnd = calendar.date(byAdding: .day, value: 1, to: end) ?? end
         let predicate = store.predicateForIncompleteReminders(
-            withDueDateStarting: queryStart,
+            withDueDateStarting: nil,
             ending: queryEnd,
             calendars: nil
         )
 
         store.fetchReminders(matching: predicate) { [weak self] fetched in
-            let items = (fetched ?? []).compactMap { reminder -> ReminderItem? in
+            let allItems = (fetched ?? []).compactMap { reminder -> ReminderItem? in
                 guard let dueDate = Self.localDueDate(for: reminder, calendar: calendar) else {
                     return nil
                 }
-                guard calendar.isDate(dueDate, inSameDayAs: now) else {
+                guard dueDate < end else {
                     return nil
                 }
 
@@ -147,11 +148,22 @@ final class ReminderMonitor: ObservableObject {
                     listTitle: reminder.calendar.title
                 )
             }
-            .sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
+
+            let items = allItems
+                .filter { item in
+                    guard let dueDate = item.dueDate else { return false }
+                    return calendar.isDate(dueDate, inSameDayAs: now)
+                }
+                .sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
+
+            let overdueItems = allItems
+                .filter { ($0.dueDate ?? .distantFuture) < start }
+                .sorted { ($0.dueDate ?? .distantPast) > ($1.dueDate ?? .distantPast) }
 
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.reminders = items
+                self.overdueReminders = overdueItems
                 self.isChecking = false
                 self.lastChecked = Date()
                 self.lastError = nil
@@ -182,6 +194,7 @@ final class ReminderMonitor: ObservableObject {
 
         if isQAPreview {
             reminders.removeAll { $0.id == item.id }
+            overdueReminders.removeAll { $0.id == item.id }
             return
         }
 
@@ -202,6 +215,7 @@ final class ReminderMonitor: ObservableObject {
         do {
             try store.save(reminder, commit: true)
             reminders.removeAll { $0.id == item.id }
+            overdueReminders.removeAll { $0.id == item.id }
             lastError = nil
             completingReminderIDs.remove(item.id)
 
@@ -221,6 +235,10 @@ final class ReminderMonitor: ObservableObject {
             ReminderItem(id: "qa-1", title: "提交报价单", dueDate: Date(), listTitle: "工作"),
             ReminderItem(id: "qa-2", title: "准备周会资料", dueDate: Date().addingTimeInterval(3600), listTitle: "工作"),
             ReminderItem(id: "qa-3", title: "跟进客户反馈", dueDate: Date().addingTimeInterval(7200), listTitle: "提醒")
+        ]
+        overdueReminders = [
+            ReminderItem(id: "qa-overdue-1", title: "补交上周报销单", dueDate: Date().addingTimeInterval(-86_400), listTitle: "工作"),
+            ReminderItem(id: "qa-overdue-2", title: "回复供应商邮件", dueDate: Date().addingTimeInterval(-172_800), listTitle: "提醒")
         ]
         lastChecked = Date()
     }

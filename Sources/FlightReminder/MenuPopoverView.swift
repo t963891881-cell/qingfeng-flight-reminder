@@ -108,6 +108,15 @@ struct MenuPopoverView: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
 
+                if !monitor.overdueReminders.isEmpty {
+                    Text("已过期 \(monitor.overdueReminders.count)")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Color.orange.opacity(0.11), in: Capsule())
+                }
+
                 Spacer()
 
                 if monitor.isChecking {
@@ -128,7 +137,7 @@ struct MenuPopoverView: View {
             .padding(.horizontal, 2)
 
             VStack(spacing: 0) {
-                if monitor.isAuthorized && monitor.reminders.isEmpty {
+                if monitor.isAuthorized && monitor.reminders.isEmpty && monitor.overdueReminders.isEmpty {
                     VStack(spacing: 8) {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 25))
@@ -148,6 +157,36 @@ struct MenuPopoverView: View {
                         }
                         ReminderRow(
                             item: item,
+                            isOverdue: false,
+                            isCompleting: monitor.completingReminderIDs.contains(item.id),
+                            onComplete: { monitor.complete(item) }
+                        )
+                    }
+                }
+
+                if !monitor.overdueReminders.isEmpty {
+                    if !monitor.reminders.isEmpty {
+                        Divider().padding(.leading, 40)
+                    }
+
+                    HStack(spacing: 7) {
+                        Image(systemName: "clock.badge.exclamationmark")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("已过期 \(monitor.overdueReminders.count) 项")
+                    }
+                    .foregroundStyle(.orange)
+                    .font(.system(size: 10, weight: .semibold))
+                    .padding(.horizontal, 13)
+                    .padding(.top, 10)
+                    .padding(.bottom, 4)
+
+                    ForEach(Array(monitor.overdueReminders.prefix(4).enumerated()), id: \.element.id) { index, item in
+                        if index > 0 {
+                            Divider().padding(.leading, 40)
+                        }
+                        ReminderRow(
+                            item: item,
+                            isOverdue: true,
                             isCompleting: monitor.completingReminderIDs.contains(item.id),
                             onComplete: { monitor.complete(item) }
                         )
@@ -322,6 +361,7 @@ struct MenuPopoverView: View {
 
 private struct ReminderRow: View {
     let item: ReminderItem
+    let isOverdue: Bool
     let isCompleting: Bool
     let onComplete: () -> Void
 
@@ -332,10 +372,17 @@ private struct ReminderRow: View {
         return formatter
     }()
 
+    private static let overdueFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "M月d日 HH:mm"
+        return formatter
+    }()
+
     var body: some View {
         HStack(alignment: .center, spacing: 11) {
             Circle()
-                .fill(Color.accentColor)
+                .fill(isOverdue ? Color.orange : Color.accentColor)
                 .frame(width: 7, height: 7)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -343,7 +390,12 @@ private struct ReminderRow: View {
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
                 HStack(spacing: 5) {
-                    Text(item.dueDate.map { "今天 \(Self.timeFormatter.string(from: $0))" } ?? "今天")
+                    if isOverdue {
+                        Text(item.dueDate.map { "已过期 · \(Self.overdueFormatter.string(from: $0))" } ?? "已过期")
+                            .foregroundStyle(.orange)
+                    } else {
+                        Text(item.dueDate.map { "今天 \(Self.timeFormatter.string(from: $0))" } ?? "今天")
+                    }
                     Text("·")
                     Text(item.listTitle)
                 }
