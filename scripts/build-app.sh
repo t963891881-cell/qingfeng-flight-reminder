@@ -18,9 +18,13 @@ rm -rf "$APP"
 mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 
 cp "$BINARY" "$CONTENTS/MacOS/FlightReminder"
-cp "$ROOT/Resources/Info.plist" "$CONTENTS/Info.plist"
+cp "$ROOT/Sources/FlightReminder/Resources/Info.plist" "$CONTENTS/Info.plist"
 cp "$ROOT/Resources/plane.png" "$CONTENTS/Resources/plane.png"
 cp "$ROOT/Resources/AppIcon.icns" "$CONTENTS/Resources/AppIcon.icns"
+# copy custom fonts for UIAppFonts
+if [ -d "${ROOT}/Resources/Fonts" ]; then
+  cp -R "${ROOT}/Resources/Fonts" "${CONTENTS}/Resources/"
+fi
 
 signed=false
 for attempt in 1 2 3; do

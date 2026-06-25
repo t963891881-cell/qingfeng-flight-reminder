@@ -11,6 +11,7 @@ final class ReminderMonitor: ObservableObject {
     @Published private(set) var authorizationStatus = EKEventStore.authorizationStatus(for: .reminder)
     @Published private(set) var isChecking = false
     @Published private(set) var lastChecked: Date?
+    @Published private(set) var nextScheduledCheckAt: Date?
     @Published private(set) var completingReminderIDs: Set<String> = []
     @Published private(set) var reschedulingReminderIDs: Set<String> = []
     @Published var lastError: String?
@@ -106,8 +107,13 @@ final class ReminderMonitor: ObservableObject {
     func restartSchedule() {
         timer?.invalidate()
         let minutes = max(5, UserDefaults.standard.integer(forKey: "checkIntervalMinutes"))
-        timer = Timer.scheduledTimer(withTimeInterval: TimeInterval(minutes * 60), repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh(shouldFly: true) }
+        let interval = TimeInterval(minutes * 60)
+        nextScheduledCheckAt = Date().addingTimeInterval(interval)
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.nextScheduledCheckAt = Date().addingTimeInterval(interval)
+                self?.refresh(shouldFly: true)
+            }
         }
     }
 
@@ -291,6 +297,8 @@ final class ReminderMonitor: ObservableObject {
             ReminderItem(id: "qa-overdue-2", title: "回复供应商邮件", dueDate: Date().addingTimeInterval(-172_800), listTitle: "提醒")
         ]
         lastChecked = Date()
+        let minutes = max(5, UserDefaults.standard.integer(forKey: "checkIntervalMinutes"))
+        nextScheduledCheckAt = Date().addingTimeInterval(TimeInterval(minutes * 60))
     }
 
     private func movePreviewItemToToday(_ item: ReminderItem) {

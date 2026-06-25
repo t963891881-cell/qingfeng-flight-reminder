@@ -21,7 +21,11 @@ final class FlightReminderAppDelegate: NSObject, NSApplicationDelegate {
 
     private func showQAPreview() {
         let monitor = ReminderMonitor.shared
-        monitor.prepareQAPreview()
+        if CommandLine.arguments.contains("--qa-use-mock-data") {
+            monitor.prepareQAPreview()
+        } else {
+            monitor.start()
+        }
         if CommandLine.arguments.contains("--qa-register-shortcut") {
             ShortcutSettings.shared.activate()
         } else {
@@ -29,7 +33,7 @@ final class FlightReminderAppDelegate: NSObject, NSApplicationDelegate {
         }
 
         guard let screen = NSScreen.screens.first(where: { $0.frame.origin == .zero }) ?? NSScreen.main else { return }
-        let size = NSSize(width: 400, height: 780)
+        let size = NSSize(width: 680, height: 460)
         let origin = NSPoint(
             x: screen.visibleFrame.maxX - size.width - 24,
             y: screen.visibleFrame.maxY - size.height - 18

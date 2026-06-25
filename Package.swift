@@ -10,8 +10,9 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "FlightReminder",
-            path: "Sources/FlightReminder"
-        )
-    ],
+            path: "Sources/FlightReminder",
+            exclude: ["Resources/Info.plist"],
+            resources: [.process("Resources")]
+        )  ],
     swiftLanguageVersions: [.v5]
 )

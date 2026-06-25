@@ -19,9 +19,9 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-	<string>1.13</string>
+	<string>1.15</string>
     <key>CFBundleVersion</key>
-	<string>14</string>
+	<string>16</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>LSUIElement</key>
@@ -32,5 +32,9 @@
     <string>清风航线需要读取今天未完成的提醒事项，以便用飞行横幅提醒你。</string>
     <key>NSRemindersFullAccessUsageDescription</key>
     <string>清风航线需要读取今天未完成的提醒事项，以便用飞行横幅提醒你。</string>
+    <key>UIAppFonts</key>
+    <array>
+        <string>Fonts/Inter-Regular.ttf</string>
+    </array>
 </dict>
 </plist>

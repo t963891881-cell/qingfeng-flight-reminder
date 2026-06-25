@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import SwiftUI
 
 @MainActor
@@ -10,6 +11,10 @@ final class FlightOverlayController {
 
     func show(reminders: [ReminderItem], isTest: Bool = false) {
         closeAll()
+        // Register custom Inter font
+        if let fontURL = Bundle.main.url(forResource: "Inter-Regular", withExtension: "ttf") {
+            CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
+        }
 
         let targets = NSScreen.screens.isEmpty ? [NSScreen.main].compactMap { $0 } : NSScreen.screens
         panels = targets.map { screen in
@@ -178,6 +183,13 @@ private struct FlightBannerView: View {
         return NSImage(contentsOf: url)
     }()
 
+// Simple background style (Feishu-like) – plain rounded rectangle with subtle shadow
+private struct SimpleStyle {
+    static let cornerRadius: CGFloat = 12
+    static let backgroundColor = Color(.windowBackgroundColor).opacity(0.95)
+    static let shadow = Color.black.opacity(0.15)
+}
+
     private var heading: String {
         if isTest {
             return reminders.isEmpty ? "测试飞行 · 今天没有提醒" : "测试飞行 · 今天 \(reminders.count) 项"
@@ -211,87 +223,88 @@ private struct FlightBannerView: View {
 
     private var banner: some View {
         Button(action: openReminders) {
-            VStack(alignment: .leading, spacing: 11) {
-                HStack(spacing: 8) {
-                    Text(heading)
-                        .font(.system(size: 20, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.primary)
-
-                    if reminders.count > 3 {
-                        Text("+\(reminders.count - 3)")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(Color.accentColor)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.accentColor.opacity(0.10), in: Capsule())
-                    }
-
-                    if hoverState.isHovered {
-                        Label("已暂停", systemImage: "pause.circle.fill")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(Color.accentColor)
-                    }
-
-                    Spacer()
-
-                    HStack(spacing: 6) {
-                        Text("打开提醒事项")
-                        Image(systemName: "chevron.right")
-                    }
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
-                }
-
-                if reminders.isEmpty {
-                    Text("当前没有可展示的真实提醒数据")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    HStack(alignment: .top, spacing: 18) {
-                        ForEach(Array(reminders.prefix(3).enumerated()), id: \.element.id) { _, reminder in
-                            HStack(alignment: .top, spacing: 7) {
-                                Circle()
-                                    .fill(Color.accentColor)
-                                    .frame(width: 7, height: 7)
-                                    .padding(.top, 4)
-
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(reminder.title)
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(.primary)
-                                        .lineLimit(1)
-                                    Text(reminder.dueDate.map { "今天 \(Self.timeFormatter.string(from: $0))" } ?? reminder.listTitle)
-                                        .font(.system(size: 10, weight: .medium))
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .frame(width: 140, alignment: .leading)
-                        }
-                        Spacer(minLength: 0)
-                    }
-                }
-            }
-            .frame(width: 590, alignment: .leading)
-            .padding(.horizontal, 23)
-            .padding(.vertical, 16)
-            .background {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .fill(Color.accentColor.opacity(0.04))
-                    }
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(Color.white.opacity(0.78), lineWidth: 1)
-            }
-            .shadow(color: Color.accentColor.opacity(0.10), radius: 28, y: 10)
-            .shadow(color: .black.opacity(0.10), radius: 18, y: 8)
+            bannerContent
         }
         .buttonStyle(.plain)
         .accessibilityLabel(isTest ? "测试飞行，展示今天的真实提醒数据" : "打开提醒事项，今天还有 \(reminders.count) 项未完成")
+    }
+
+    private var bannerContent: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            HStack(spacing: 8) {
+                Text(heading)
+                    .font(.custom("Inter-Regular", size: 20))
+                    .foregroundStyle(.primary)
+
+                if reminders.count > 3 {
+                    Text("+\(reminders.count - 3)")
+                        .font(.custom("Inter-Regular", size: 10))
+                        .foregroundStyle(Color.accentColor)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.accentColor.opacity(0.10), in: Capsule())
+                }
+
+                if hoverState.isHovered {
+                    Label("已暂停", systemImage: "pause.circle.fill")
+                        .font(.custom("Inter-Regular", size: 11))
+                        .foregroundStyle(Color.accentColor)
+                }
+
+                Spacer()
+
+                HStack(spacing: 6) {
+                    Text("打开提醒事项")
+                    Image(systemName: "chevron.right")
+                }
+                .font(.custom("Inter-Regular", size: 13))
+                .foregroundStyle(Color.accentColor)
+            }
+
+            if reminders.isEmpty {
+                Text("当前没有可展示的真实提醒数据")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(alignment: .top, spacing: 18) {
+                    ForEach(Array(reminders.prefix(3).enumerated()), id: \.element.id) { _, reminder in
+                        HStack(alignment: .top, spacing: 7) {
+                            Circle()
+                                .fill(Color.accentColor)
+                                .frame(width: 7, height: 7)
+                                .padding(.top, 4)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(reminder.title)
+                                    .font(.custom("Inter-Regular", size: 12))
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+                                Text(reminder.dueDate.map { "今天 \(Self.timeFormatter.string(from: $0))" } ?? reminder.listTitle)
+                                    .font(.custom("Inter-Regular", size: 10))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(width: 140, alignment: .leading)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        .frame(width: 590, alignment: .leading)
+        .padding(.horizontal, 23)
+        .padding(.vertical, 16)
+        .background(
+            RoundedRectangle(cornerRadius: SimpleStyle.cornerRadius, style: .continuous)
+                .fill(SimpleStyle.backgroundColor)
+                .overlay {
+                    RoundedRectangle(cornerRadius: SimpleStyle.cornerRadius, style: .continuous)
+                        .stroke(Color.gray.opacity(0.4), lineWidth: 1)
+                }
+        )
+        .scaleEffect(hoverState.isHovered ? 1.02 : 1.0)
+        .animation(.easeOut(duration: 0.2), value: hoverState.isHovered)
+        .shadow(color: hoverState.isHovered ? SimpleStyle.shadow : Color.black.opacity(0.10), radius: hoverState.isHovered ? 24 : 12, y: hoverState.isHovered ? 8 : 4)
     }
 
     private func openReminders() {

@@ -10,6 +10,12 @@ struct MenuPopoverView: View {
     @AppStorage("checkIntervalMinutes") private var checkIntervalMinutes = 30
     @AppStorage("quietStartMinutes") private var quietStartMinutes = 22 * 60 + 30
     @AppStorage("quietEndMinutes") private var quietEndMinutes = 7 * 60 + 30
+    
+    @State private var animateGlow = false
+    @State private var iconHovered = false
+    @State private var testFlightHovered = false
+    @State private var pulseGreen = 0.6
+    @State private var planeOffset: CGFloat = -20
 
     private static let appIcon: NSImage? = {
         guard let url = Bundle.main.resourceURL?.appendingPathComponent("AppIcon.icns") else { return nil }
@@ -18,118 +24,392 @@ struct MenuPopoverView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-
-            if !monitor.isAuthorized {
-                permissionCard
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 10)
+            // Simulated Traffic Lights Row
+            HStack {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color(red: 1.0, green: 0.37, blue: 0.34))
+                        .frame(width: 12, height: 12)
+                    Circle()
+                        .fill(Color(red: 1.0, green: 0.74, blue: 0.18))
+                        .frame(width: 12, height: 12)
+                    Circle()
+                        .fill(Color(red: 0.15, green: 0.79, blue: 0.25))
+                        .frame(width: 12, height: 12)
+                }
+                Spacer()
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 14)
 
-            summaryHeader
-                .padding(.horizontal, 16)
-                .padding(.top, 4)
+            // Header Section
+            HStack(spacing: 12) {
+                Group {
+                    if let icon = Self.appIcon {
+                        Image(nsImage: icon)
+                            .resizable()
+                            .scaledToFit()
+                    } else {
+                        Image(systemName: "airplane")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(Color.blue)
+                    }
+                }
+                .frame(width: 44, height: 44)
+                .cornerRadius(10)
+                .scaleEffect(iconHovered ? 1.08 : 1.0)
+                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: iconHovered)
+                .onHover { hover in
+                    iconHovered = hover
+                }
 
-            reminderList
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("清风航线")
+                        .font(.system(size: 19, weight: .bold))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [Color(red: 0.1, green: 0.5, blue: 1.0), Color(red: 0.85, green: 0.25, blue: 0.9)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                    
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(monitorEnabled ? Color(red: 0.15, green: 0.79, blue: 0.25) : Color.secondary)
+                            .frame(width: 6, height: 6)
+                            .shadow(color: monitorEnabled ? Color(red: 0.15, green: 0.79, blue: 0.25).opacity(0.8) : Color.clear, radius: 2)
+                            .opacity(monitorEnabled ? pulseGreen : 1.0)
+                        Text(monitorEnabled ? "提醒飞行已启用" : "提醒飞行已暂停")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer()
+
+                Toggle("", isOn: $monitorEnabled)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.regular)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
+
+            // Today's summary & refresh row
+            HStack {
+                Text(monitor.reminders.isEmpty ? "今天没有待处理提醒" : "今天还有 \(monitor.reminders.count) 项提醒")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                if monitor.isChecking {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button {
+                        monitor.refresh(shouldFly: false)
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 12, weight: .semibold))
+                            .frame(width: 24, height: 24)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
+
+            // Reminders card list container
+            VStack(spacing: 0) {
+                if !monitor.isAuthorized {
+                    permissionCard
+                } else if monitor.reminders.isEmpty && monitor.overdueReminders.isEmpty {
+                    HStack(spacing: 10) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundStyle(Color.green)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("今天的航线很清爽")
+                                .font(.system(size: 12, weight: .semibold))
+                            Text("清风航线会继续安静巡航")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                } else {
+                    let items = monitor.reminders + monitor.overdueReminders
+                    let displayCount = min(items.count, 3)
+                    let listHeight = CGFloat(displayCount) * 48.0 + CGFloat(max(0, displayCount - 1)) * 1.0
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                                if index > 0 {
+                                    Divider()
+                                }
+                                ReminderRow(
+                                    item: item,
+                                    isOverdue: monitor.overdueReminders.contains(where: { $0.id == item.id }),
+                                    isCompleting: monitor.completingReminderIDs.contains(item.id),
+                                    isRescheduling: monitor.reschedulingReminderIDs.contains(item.id),
+                                    onMoveToToday: monitor.overdueReminders.contains(where: { $0.id == item.id }) ? { monitor.moveToToday(item) } : nil,
+                                    onComplete: { monitor.complete(item) }
+                                )
+                            }
+                        }
+                    }
+                    .frame(height: listHeight)
+                }
+                
+                Divider()
+                
+                Button {
+                    monitor.openReminders()
+                } label: {
+                    HStack {
+                        Text("打开提醒事项")
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .bold))
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.blue)
                 .padding(.horizontal, 14)
-                .padding(.top, 8)
+                .padding(.vertical, 8)
+            }
+            .background(Color.white.opacity(0.42))
+            .cornerRadius(12)
+            .shadow(color: Color.black.opacity(0.03), radius: 6, x: 0, y: 3)
+            .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.white.opacity(0.3), lineWidth: 1)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 6)
 
-            settingsSection
-                .padding(.horizontal, 16)
-                .padding(.top, 9)
+            // Settings section
+            VStack(spacing: 8) {
+                // Row 1: 检测间隔
+                HStack(spacing: 8) {
+                    Image(systemName: "clock")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 16)
+                    Text("检测间隔")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(nextFlightText)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 8)
+                    Spacer()
+                    
+                    Menu {
+                        ForEach([5, 15, 30, 60, 120], id: \.self) { mins in
+                            Button(intervalText(mins)) {
+                                checkIntervalMinutes = mins
+                                monitor.restartSchedule()
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(intervalText(checkIntervalMinutes))
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.primary)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(Color.blue)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.white.opacity(0.4))
+                        .cornerRadius(6)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.black.opacity(0.08), lineWidth: 1)
+                        }
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.plain)
+                }
+                
+                Divider()
+                
+                // Row 2: 勿扰时段
+                HStack(spacing: 8) {
+                    Image(systemName: "moon")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 16)
+                    Text("勿扰时段")
+                        .font(.system(size: 12, weight: .semibold))
+                    Spacer()
+                    
+                    HStack(spacing: 4) {
+                        TimeDropdownPicker(totalMinutes: $quietStartMinutes)
+                        Text("–")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                        TimeDropdownPicker(totalMinutes: $quietEndMinutes)
+                    }
+                }
+                
+                Divider()
+                
+                // Row 3: 关于清风航线
+                Button(action: showAbout) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 16)
+                        Text("关于清风航线")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
 
-            footer
+            // Footer Section
+            HStack(spacing: 8) {
+                Button {
+                    monitor.testFlight()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "paperplane.fill")
+                            .offset(x: testFlightHovered ? 3 : 0, y: testFlightHovered ? -3 : 0)
+                            .animation(.spring(response: 0.3, dampingFraction: 0.5), value: testFlightHovered)
+                        Text("测试飞行")
+                    }
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 32)
+                    .background(
+                        LinearGradient(
+                            colors: [Color(red: 0.2, green: 0.5, blue: 1.0), Color(red: 0.85, green: 0.25, blue: 0.9)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .cornerRadius(8)
+                    .shadow(color: Color(red: 0.85, green: 0.25, blue: 0.9).opacity(0.2), radius: 4, x: 0, y: 2)
+                }
+                .buttonStyle(.plain)
+                .onHover { hover in
+                    testFlightHovered = hover
+                }
+                
+                Button {
+                    shortcutSettings.startRecording()
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: shortcutSettings.isRecording ? "record.circle" : "keyboard")
+                            .font(.system(size: 11))
+                        Text(shortcutSettings.displayText)
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(shortcutSettings.isRecording ? Color.orange : Color.primary.opacity(0.72))
+                    .padding(.horizontal, 10)
+                    .frame(height: 32)
+                    .background(Color.white.opacity(0.4))
+                    .cornerRadius(8)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.black.opacity(0.08), lineWidth: 1)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
+
+            // Last checked & Exit
+            HStack {
+                if let lastChecked = monitor.lastChecked {
+                    Text("上次检测于 \(lastChecked, style: .relative)前")
+                } else {
+                    Text("等待首次检测")
+                }
+                Spacer()
+                Button("退出") { NSApplication.shared.terminate(nil) }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.secondary)
+                    .font(.system(size: 10))
+            }
+            .font(.system(size: 10))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
         }
-        .frame(width: 400)
+        .frame(width: 680)
+        .background {
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.94, green: 0.91, blue: 0.98),
+                        Color(red: 0.90, green: 0.93, blue: 0.99),
+                        Color(red: 0.98, green: 0.92, blue: 0.94)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                
+                Circle()
+                    .fill(Color(red: 0.35, green: 0.65, blue: 1.0).opacity(0.24))
+                    .frame(width: 480, height: 480)
+                    .blur(radius: 70)
+                    .offset(x: animateGlow ? 200 : -200, y: animateGlow ? -100 : 100)
+                
+                Circle()
+                    .fill(Color(red: 0.95, green: 0.4, blue: 0.85).opacity(0.18))
+                    .frame(width: 400, height: 400)
+                    .blur(radius: 60)
+                    .offset(x: animateGlow ? -180 : 180, y: animateGlow ? 100 : -100)
+                
+                Circle()
+                    .fill(Color(red: 1.0, green: 0.6, blue: 0.4).opacity(0.12))
+                    .frame(width: 320, height: 320)
+                    .blur(radius: 50)
+                    .offset(x: animateGlow ? 100 : -100, y: animateGlow ? 120 : -120)
+            }
+            .animation(.easeInOut(duration: 10).repeatForever(autoreverses: true), value: animateGlow)
+        }
         .background(.ultraThinMaterial)
-        .tint(Color.accentColor)
+        .tint(Color.blue)
         .onAppear {
+            animateGlow = true
             monitor.start()
             shortcutSettings.activate()
+            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                pulseGreen = 1.0
+            }
         }
         .onDisappear {
             shortcutSettings.cancelRecording()
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 12) {
-            Group {
-                if let icon = Self.appIcon {
-                    Image(nsImage: icon)
-                        .resizable()
-                        .scaledToFit()
-                } else {
-                    Image(systemName: "airplane")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(Color.accentColor)
-                }
-            }
-            .frame(width: 42, height: 42)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("清风航线")
-                    .font(.system(size: 17, weight: .semibold))
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(monitorEnabled ? Color.green : Color.secondary)
-                        .frame(width: 6, height: 6)
-                    Text(monitorEnabled ? "提醒飞行已启用" : "提醒飞行已暂停")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Spacer()
-
-            Toggle("启用提醒飞行", isOn: $monitorEnabled)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.regular)
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 15)
-        .padding(.bottom, 12)
-    }
-
-    private var summaryHeader: some View {
-        HStack(spacing: 10) {
-            Text(monitor.reminders.isEmpty ? "今天没有待处理提醒" : "今天还有 \(monitor.reminders.count) 项提醒")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
-
-            if !monitor.overdueReminders.isEmpty {
-                Text("已过期 \(monitor.overdueReminders.count)")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.orange)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(Color.orange.opacity(0.11), in: Capsule())
-            }
-
-            Spacer()
-
-            if monitor.isChecking {
-                ProgressView().controlSize(.small)
-            } else {
-                Button {
-                    monitor.refresh(shouldFly: false)
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 26, height: 26)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .help("立即刷新")
-            }
-        }
-    }
-
     private var permissionCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 6) {
             Label(monitor.authorizationMessage, systemImage: "lock.shield")
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -141,237 +421,30 @@ struct MenuPopoverView: View {
                 }
             }
             .buttonStyle(.borderedProminent)
+            .controlSize(.small)
         }
-        .padding(12)
+        .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
-    private var reminderList: some View {
-        VStack(spacing: 0) {
-            if monitor.isAuthorized && monitor.reminders.isEmpty && monitor.overdueReminders.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 25))
-                        .foregroundStyle(Color.green)
-                    Text("今天的航线很清爽")
-                        .font(.system(size: 13, weight: .semibold))
-                    Text("清风航线会继续安静巡航")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 24)
-            } else {
-                ForEach(Array(monitor.reminders.prefix(4).enumerated()), id: \.element.id) { index, item in
-                    if index > 0 {
-                        Divider().padding(.leading, 52)
-                    }
-                    ReminderRow(
-                        item: item,
-                        isOverdue: false,
-                        isCompleting: monitor.completingReminderIDs.contains(item.id),
-                        isRescheduling: false,
-                        onMoveToToday: nil,
-                        onComplete: { monitor.complete(item) }
-                    )
-                }
-            }
-
-            if !monitor.overdueReminders.isEmpty {
-                Divider().padding(.leading, 52)
-
-                Label("已过期 \(monitor.overdueReminders.count) 项", systemImage: "clock.badge.exclamationmark")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.orange)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 8)
-
-                ForEach(Array(monitor.overdueReminders.prefix(4).enumerated()), id: \.element.id) { index, item in
-                    if index > 0 {
-                        Divider().padding(.leading, 52)
-                    }
-                    ReminderRow(
-                        item: item,
-                        isOverdue: true,
-                        isCompleting: monitor.completingReminderIDs.contains(item.id),
-                        isRescheduling: monitor.reschedulingReminderIDs.contains(item.id),
-                        onMoveToToday: { monitor.moveToToday(item) },
-                        onComplete: { monitor.complete(item) }
-                    )
-                }
-            }
-
-            if monitor.isAuthorized {
-                Divider().padding(.leading, 14)
-                Button {
-                    monitor.openReminders()
-                } label: {
-                    HStack {
-                        Text("打开提醒事项")
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 10, weight: .semibold))
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 11)
-            }
-        }
-        .background {
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .fill(.thinMaterial)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 15, style: .continuous)
-                        .fill(Color.accentColor.opacity(0.038))
-                }
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.38), lineWidth: 0.5)
+    private func intervalText(_ minutes: Int) -> String {
+        if minutes >= 120 {
+            return "\(minutes / 60) 小时"
+        } else if minutes >= 60 {
+            return "60 分钟"
+        } else {
+            return "\(minutes) 分钟"
         }
     }
 
-    private var settingsSection: some View {
-        VStack(spacing: 0) {
-            Divider()
-
-            settingRow(icon: "clock", title: "检测间隔") {
-                Picker("检测间隔", selection: $checkIntervalMinutes) {
-                    Text("5 分钟").tag(5)
-                    Text("15 分钟").tag(15)
-                    Text("30 分钟").tag(30)
-                    Text("60 分钟").tag(60)
-                    Text("2 小时").tag(120)
-                }
-                .labelsHidden()
-                .frame(width: 96)
-                .onChange(of: checkIntervalMinutes) { _, _ in monitor.restartSchedule() }
-            }
-
-            Divider().padding(.leading, 34)
-
-            settingRow(icon: "moon", title: "勿扰时段") {
-                HStack(spacing: 4) {
-                    compactTimePicker(minutes: $quietStartMinutes)
-                    Text("–").foregroundStyle(.tertiary)
-                    compactTimePicker(minutes: $quietEndMinutes)
-                }
-            }
-
-            Divider().padding(.leading, 34)
-
-            settingRow(icon: "keyboard", title: "测试飞行快捷键") {
-                Button {
-                    shortcutSettings.startRecording()
-                } label: {
-                    Text(shortcutSettings.displayText)
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .frame(minWidth: 54)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .tint(shortcutSettings.isRecording ? Color.orange : Color.accentColor)
-                .help("点击后按下组合键；录制时按 Delete 可清除")
-            }
-
-            Divider().padding(.leading, 34)
-
-            Button(action: showAbout) {
-                HStack(spacing: 10) {
-                    Image(systemName: "info.circle")
-                        .font(.system(size: 15))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 20)
-                    Text("关于清风航线")
-                        .font(.system(size: 12, weight: .medium))
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .contentShape(Rectangle())
-                .padding(.horizontal, 2)
-                .padding(.vertical, 11)
-            }
-            .buttonStyle(.plain)
-
-            Divider()
-        }
-    }
-
-    private var footer: some View {
-        VStack(spacing: 9) {
-            if let error = monitor.lastError ?? shortcutSettings.errorMessage {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.red)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            Button {
-                monitor.testFlight()
-            } label: {
-                Label("测试飞行", systemImage: "paperplane.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 3)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-
-            HStack {
-                if let lastChecked = monitor.lastChecked {
-                    Text("上次检测于 \(lastChecked, style: .relative)前")
-                } else {
-                    Text("等待首次检测")
-                }
-                Spacer()
-                Button("退出") { NSApplication.shared.terminate(nil) }
-                    .buttonStyle(.plain)
-            }
-            .font(.system(size: 10, weight: .medium))
-            .foregroundStyle(.tertiary)
-        }
-        .padding(.horizontal, 14)
-        .padding(.top, 10)
-        .padding(.bottom, 12)
-    }
-
-    private func settingRow<Content: View>(icon: String, title: String, @ViewBuilder content: () -> Content) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 15))
-                .foregroundStyle(.secondary)
-                .frame(width: 20)
-            Text(title)
-                .font(.system(size: 12, weight: .medium))
-            Spacer()
-            content()
-        }
-        .padding(.horizontal, 2)
-        .padding(.vertical, 10)
-    }
-
-    private func compactTimePicker(minutes: Binding<Int>) -> some View {
-        let value = Binding<Date>(
-            get: {
-                Calendar.current.date(bySettingHour: minutes.wrappedValue / 60, minute: minutes.wrappedValue % 60, second: 0, of: Date()) ?? Date()
-            },
-            set: { newValue in
-                let parts = Calendar.current.dateComponents([.hour, .minute], from: newValue)
-                minutes.wrappedValue = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
-            }
-        )
-        return DatePicker("时间", selection: value, displayedComponents: .hourAndMinute)
-            .labelsHidden()
-            .datePickerStyle(.field)
-            .environment(\.locale, Locale(identifier: "en_GB"))
-            .frame(width: 72)
+    private var nextFlightText: String {
+        guard monitorEnabled else { return "已暂停" }
+        guard let next = monitor.nextScheduledCheckAt else { return "下次飞行时间：待定" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "HH:mm"
+        return "下次飞行时间：\(formatter.string(from: next))"
     }
 
     private func showAbout() {
@@ -385,6 +458,63 @@ struct MenuPopoverView: View {
     }
 }
 
+// Custom Time Pickers
+struct TimeDropdownPicker: View {
+    @Binding var totalMinutes: Int
+    
+    var body: some View {
+        HStack(spacing: 3) {
+            Menu {
+                ForEach(0..<24, id: \.self) { h in
+                    Button(String(format: "%02d", h)) {
+                        let currentMin = totalMinutes % 60
+                        totalMinutes = h * 60 + currentMin
+                    }
+                }
+            } label: {
+                Text(String(format: "%02d", totalMinutes / 60))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.primary)
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            
+            Text(":")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.secondary)
+            
+            Menu {
+                ForEach([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55], id: \.self) { m in
+                    Button(String(format: "%02d", m)) {
+                        let currentHour = totalMinutes / 60
+                        totalMinutes = currentHour * 60 + m
+                    }
+                }
+            } label: {
+                Text(String(format: "%02d", totalMinutes % 60))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.primary)
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.system(size: 8))
+                .foregroundStyle(Color.purple)
+                .padding(.leading, 1)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(Color.white.opacity(0.4))
+        .cornerRadius(6)
+        .overlay {
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color.black.opacity(0.08), lineWidth: 1)
+        }
+    }
+}
+
+// Custom Reminder Row
 private struct ReminderRow: View {
     let item: ReminderItem
     let isOverdue: Bool
@@ -392,6 +522,8 @@ private struct ReminderRow: View {
     let isRescheduling: Bool
     let onMoveToToday: (() -> Void)?
     let onComplete: () -> Void
+
+    @State private var isHovered = false
 
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -410,14 +542,16 @@ private struct ReminderRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
             Circle()
-                .fill(isOverdue ? Color.orange : Color.accentColor)
-                .frame(width: 7, height: 7)
+                .fill(isOverdue ? Color.orange : Color.blue)
+                .frame(width: 8, height: 8)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title)
                     .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
-                HStack(spacing: 5) {
+                
+                HStack(spacing: 4) {
                     if isOverdue {
                         Text(item.dueDate.map { "已过期 · \(Self.overdueFormatter.string(from: $0))" } ?? "已过期")
                             .foregroundStyle(.orange)
@@ -442,14 +576,13 @@ private struct ReminderRow: View {
                     } else {
                         Text("今天办")
                             .font(.system(size: 10, weight: .semibold))
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
                             .background(Color.secondary.opacity(0.10), in: Capsule())
                     }
                 }
                 .buttonStyle(.plain)
                 .disabled(isRescheduling || isCompleting)
-                .help("把截止日期改为今天")
             }
 
             Button(action: onComplete) {
@@ -461,16 +594,21 @@ private struct ReminderRow: View {
                             .font(.system(size: 16, weight: .regular))
                     }
                 }
-                .frame(width: 28, height: 28)
+                .frame(width: 24, height: 24)
                 .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(.secondary)
             .disabled(isCompleting || isRescheduling)
-            .help("标记为已完成")
-            .accessibilityLabel("完成提醒：\(item.title)")
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 9)
+        .padding(.vertical, 8)
+        .background(isHovered ? Color.primary.opacity(0.04) : Color.clear)
+        .contentShape(Rectangle())
+        .onHover { hover in
+            withAnimation(.easeOut(duration: 0.15)) {
+                isHovered = hover
+            }
+        }
     }
 }
