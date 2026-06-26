@@ -1,9 +1,14 @@
 import AppKit
 import SwiftUI
 
+final class InteractivePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
 @MainActor
 final class FlightReminderAppDelegate: NSObject, NSApplicationDelegate {
-    private var qaPanel: NSPanel?
+    private var qaPanel: InteractivePanel?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if CommandLine.arguments.contains("--qa-preview") {
@@ -38,7 +43,7 @@ final class FlightReminderAppDelegate: NSObject, NSApplicationDelegate {
             x: screen.visibleFrame.maxX - size.width - 24,
             y: screen.visibleFrame.maxY - size.height - 18
         )
-        let panel = NSPanel(
+        let panel = InteractivePanel(
             contentRect: NSRect(origin: origin, size: size),
             styleMask: [.borderless],
             backing: .buffered,
