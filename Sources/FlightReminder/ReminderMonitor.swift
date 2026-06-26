@@ -16,6 +16,11 @@ final class ReminderMonitor: ObservableObject {
     @Published private(set) var reschedulingReminderIDs: Set<String> = []
     @Published var lastError: String?
 
+    var soundEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: "soundEnabled") }
+        set { UserDefaults.standard.set(newValue, forKey: "soundEnabled") }
+    }
+
     private let store = EKEventStore()
     private var timer: Timer?
     private var observers: [NSObjectProtocol] = []
@@ -186,6 +191,7 @@ final class ReminderMonitor: ObservableObject {
                    !self.isQuietTime,
                    self.canFlyNow {
                     self.lastFlightAt = Date()
+                    self.playFlightSound()
                     FlightOverlayController.shared.show(reminders: items)
                 }
             }
@@ -198,6 +204,13 @@ final class ReminderMonitor: ObservableObject {
             return
         }
         refresh(shouldFly: false, showTestAfterRefresh: true)
+    }
+
+    func completeAll() {
+        let items = reminders + overdueReminders
+        for item in items {
+            complete(item)
+        }
     }
 
     func complete(_ item: ReminderItem) {
@@ -335,7 +348,7 @@ final class ReminderMonitor: ObservableObject {
         return calendar.date(from: components)
     }
 
-    private var isQuietTime: Bool {
+    var isQuietTimeNow: Bool {
         let defaults = UserDefaults.standard
         let start = defaults.object(forKey: "quietStartMinutes") as? Int ?? 22 * 60 + 30
         let end = defaults.object(forKey: "quietEndMinutes") as? Int ?? 7 * 60 + 30
@@ -344,6 +357,14 @@ final class ReminderMonitor: ObservableObject {
 
         if start == end { return false }
         return start < end ? (current >= start && current < end) : (current >= start || current < end)
+    }
+
+    // Keep private alias for internal use
+    private var isQuietTime: Bool { isQuietTimeNow }
+
+    private func playFlightSound() {
+        guard soundEnabled else { return }
+        NSSound(named: .init("Funk"))?.play()
     }
 
     deinit {

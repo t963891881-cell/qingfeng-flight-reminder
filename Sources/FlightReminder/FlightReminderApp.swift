@@ -33,7 +33,7 @@ final class FlightReminderAppDelegate: NSObject, NSApplicationDelegate {
         }
 
         guard let screen = NSScreen.screens.first(where: { $0.frame.origin == .zero }) ?? NSScreen.main else { return }
-        let size = NSSize(width: 680, height: 460)
+        let size = NSSize(width: 680, height: 500)
         let origin = NSPoint(
             x: screen.visibleFrame.maxX - size.width - 24,
             y: screen.visibleFrame.maxY - size.height - 18
@@ -94,9 +94,22 @@ struct FlightReminderApp: App {
         MenuBarExtra {
             MenuPopoverView(monitor: monitor)
         } label: {
-            Image(systemName: monitor.reminders.isEmpty ? "airplane" : "airplane.circle.fill")
+            Image(systemName: menuBarIconName)
                 .accessibilityLabel("清风航线")
         }
         .menuBarExtraStyle(.window)
+    }
+
+    private var menuBarIconName: String {
+        if monitor.isQuietTimeNow {
+            return "moon.fill"
+        }
+        if !monitor.overdueReminders.isEmpty {
+            return "exclamationmark.triangle.fill"
+        }
+        if !monitor.reminders.isEmpty {
+            return "airplane.circle.fill"
+        }
+        return "airplane"
     }
 }
