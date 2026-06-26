@@ -233,8 +233,8 @@ struct MenuPopoverView: View {
                     let items = monitor.reminders + monitor.overdueReminders
                     ScrollView {
                         VStack(spacing: 0) {
-                            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                                if index > 0 {
+                            ForEach(items) { item in
+                                if item.id != items.first?.id {
                                     Divider()
                                 }
                                 ReminderRow(
@@ -248,7 +248,7 @@ struct MenuPopoverView: View {
                             }
                         }
                     }
-                    .frame(maxHeight: 160)
+                    .frame(height: items.count <= 3 ? CGFloat(items.count) * 44 : 160)
                 }
                 
                 Divider()
